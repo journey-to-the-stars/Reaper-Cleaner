@@ -7,12 +7,14 @@ class InputHandler:
         self.mouse_buttons = {}
         self.mouse_pos = (0, 0)
         self.scythe_pressed = False
+        self.confirm_pressed = False
         self.grimoir_held = False
         self.pause_pressed = False
         self.debug_pressed = False
 
     def handle_events(self, events):
         self.scythe_pressed = False
+        self.confirm_pressed = False
         self.pause_pressed = False
         self.debug_pressed = False
 
@@ -22,13 +24,11 @@ class InputHandler:
                     self.pause_pressed = True
                 if event.key == pygame.K_F1:
                     self.debug_pressed = True
+                if event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                    self.confirm_pressed = True
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     self.scythe_pressed = True
-            if event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 3:
-                    pass
-
         self.keys = pygame.key.get_pressed()
         self.mouse_buttons = pygame.mouse.get_pressed()
         self.mouse_pos = pygame.mouse.get_pos()

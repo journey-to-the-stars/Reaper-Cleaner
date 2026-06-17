@@ -14,6 +14,7 @@ class RoomType(Enum):
     TREASURE = auto()
     EXIT = auto()
     BOSS = auto()
+    CHALLENGE = auto()
 
 
 class DoorPosition(Enum):
@@ -40,6 +41,9 @@ class Room:
         self.tiles = self._build_tiles()
         self.enemy_spawns = []
         self.spawned_enemies = []
+        self.spawned_pickups = []
+        self.waves = []
+        self.current_wave = 0
 
     def _build_tiles(self):
         tiles = [[TileType.WALL] * ROOM_COLS for _ in range(ROOM_ROWS)]
@@ -75,19 +79,19 @@ class Room:
         for door_pos in self.doors:
             if door_pos == DoorPosition.NORTH:
                 for dx in range(cx - hw, cx + hw + 1):
-                    for dy in range(0, 6):
+                    for dy in range(0, 8):
                         zones.add((dx, dy))
             elif door_pos == DoorPosition.SOUTH:
                 for dx in range(cx - hw, cx + hw + 1):
-                    for dy in range(ROOM_ROWS - 6, ROOM_ROWS):
+                    for dy in range(ROOM_ROWS - 8, ROOM_ROWS):
                         zones.add((dx, dy))
             elif door_pos == DoorPosition.EAST:
                 for dy in range(cy - hw, cy + hw + 1):
-                    for dx in range(ROOM_COLS - 6, ROOM_COLS):
+                    for dx in range(ROOM_COLS - 8, ROOM_COLS):
                         zones.add((dx, dy))
             elif door_pos == DoorPosition.WEST:
                 for dy in range(cy - hw, cy + hw + 1):
-                    for dx in range(0, 6):
+                    for dx in range(0, 8):
                         zones.add((dx, dy))
         return zones
 
@@ -99,8 +103,8 @@ class Room:
         quadrants = [[], [], [], []]
         mid_x, mid_y = ROOM_COLS // 2, ROOM_ROWS // 2
 
-        for y in range(5, ROOM_ROWS - 5):
-            for x in range(5, ROOM_COLS - 5):
+        for y in range(7, ROOM_ROWS - 7):
+            for x in range(7, ROOM_COLS - 7):
                 if (x, y) in zones:
                     continue
                 tx = x * TILE_SIZE + TILE_SIZE // 2

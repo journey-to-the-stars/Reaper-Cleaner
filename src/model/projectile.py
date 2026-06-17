@@ -32,7 +32,10 @@ class Projectile(pygame.sprite.Sprite):
                 self.target = nearest[0] if nearest else None
 
             if self.target and self.target.alive:
-                desired = (pygame.math.Vector2(self.target.rect.center) - self.pos).normalize()
+                diff = pygame.math.Vector2(self.target.rect.center) - self.pos
+                if diff.length_squared() < 1:
+                    return
+                desired = diff.normalize()
                 current = pygame.math.Vector2(math.cos(self.angle), math.sin(self.angle))
                 dot = current.dot(desired)
                 dot = max(-1, min(1, dot))
@@ -53,6 +56,10 @@ class Projectile(pygame.sprite.Sprite):
 class GrimoirFlame(Projectile):
     def __init__(self, x, y, angle):
         super().__init__(x, y, angle, GRIMOIR_PROJECTILE_SPEED, 20, homing=True, color=(255, 50, 50))
+        spr = SPRITES.get("balefire(grimoire_projectile)")
+        if spr:
+            self.image = pygame.transform.scale(spr, (16, 16))
+            self.rect = self.image.get_rect(center=(int(x), int(y)))
 
 
 class BloodClot(Projectile):

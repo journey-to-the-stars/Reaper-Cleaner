@@ -46,7 +46,8 @@ def generate_floor_layout(floor_number=1):
 
     is_final = (floor_number == NUM_FLOORS)
     _assign_types(rooms, expansion_order, is_final)
-    _add_cycles(rooms, max_cycles=random.randint(0, 2))
+    _add_cycles(rooms, max_cycles=random.randint(1, min(5, len(rooms))))
+    _ensure_start_connections(rooms)
     _ensure_dead_ends(rooms, expansion_order, is_final)
     _rebuild_tiles(rooms)
     _populate_spawns(rooms, is_final)
@@ -65,9 +66,15 @@ def _assign_types(rooms, expansion_order, is_final):
         last_pos = expansion_order[-1]
         rooms[last_pos].room_type = RoomType.BOSS if is_final else RoomType.EXIT
 
+    has_challenge = False
     for pos in expansion_order[1:-1]:
         room = rooms[pos]
-        if len(room.doors) == 1 and random.random() < 0.3:
+        if not has_challenge and len(room.doors) <= 2 and random.random() < 0.25:
+            room.room_type = RoomType.CHALLENGE
+            has_challenge = True
+        elif len(room.doors) == 1 and not has_challenge and random.random() < 0.3:
+            room.room_type = RoomType.TREASURE
+        elif len(room.doors) == 1 and random.random() < 0.3:
             room.room_type = RoomType.TREASURE
         else:
             room.room_type = RoomType.COMBAT
@@ -101,6 +108,21 @@ def _add_cycles(rooms, max_cycles=2):
         cycles_added += 1
 
 
+def _ensure_start_connections(rooms, start=(0, 0)):
+    if start not in rooms:
+        return
+    for dx, dy, door_out, door_in in [
+        (0, -1, DoorPosition.NORTH, DoorPosition.SOUTH),
+        (0, 1, DoorPosition.SOUTH, DoorPosition.NORTH),
+        (-1, 0, DoorPosition.WEST, DoorPosition.EAST),
+        (1, 0, DoorPosition.EAST, DoorPosition.WEST),
+    ]:
+        npos = (start[0] + dx, start[1] + dy)
+        if npos in rooms and door_out not in rooms[start].doors:
+            rooms[start].doors[door_out] = npos
+            rooms[npos].doors[door_in] = start
+
+
 def _ensure_dead_ends(rooms, expansion_order, is_final):
     for pos in expansion_order:
         if pos == expansion_order[0]:
@@ -119,10 +141,10 @@ def _ensure_dead_ends(rooms, expansion_order, is_final):
             continue
         removable = []
         for door_pos, target in list(room.doors.items()):
-            if target == rooms[pos].doors.get(OPPOSITE_DOOR[door_pos]):
+            if target in rooms and rooms[target].doors.get(OPPOSITE_DOOR[door_pos]) == pos:
                 removable.append((door_pos, target))
         for door_pos, target in removable:
-            if target in rooms and len(rooms[target].doors) > 1:
+            if target in rooms and len(rooms[target].doors) > 1 and rooms[target].room_type != RoomType.EXIT:
                 del rooms[target].doors[OPPOSITE_DOOR[door_pos]]
                 del rooms[pos].doors[door_pos]
                 break
@@ -148,4 +170,14 @@ def _populate_spawns(rooms, is_final):
         elif room.room_type == RoomType.EXIT:
             room.generate_enemy_spawns()
             spawns = [(wx, wy, WormEnemy) for (wx, wy) in room.enemy_spawns]
-            room.enemy_spawns = spawns * EXIT_ENEMY_MULTIPLIER
+            count = int(EXIT_ENEMY_MULTIPLIER) + (1 if random.random() < EXIT_ENEMY_MULTIPLIER % 1 else 0)
+            room.enemy_spawns = spawns * count
+        elif room.room_type == RoomType.CHALLENGE:
+            room.generate_enemy_spawns()
+            base = [(wx, wy, WormEnemy) for (wx, wy) in room.enemy_spawns]
+            room.waves = []
+            for w in range(3):
+                extra = w
+                wave = base * (w + 1)
+                random.shuffle(wave)
+                room.waves.append(wave)

@@ -1,9 +1,10 @@
 import pygame, math, sys, random
 from src.config.settings import (
-    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TILE_SIZE, SCYTHE_DAMAGE,
+    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TILE_SIZE,
     FLOOR_TRANSITION_DURATION, NUM_FLOORS, HEALTH_PICKUP_HEAL,
+    ROOM_COLS, ROOM_ROWS, SCYTHE_ARC, SCYTHE_DURATION,
 )
-from src.config.assets import init_sprites
+from src.config.assets import init_sprites, SPRITES
 from src.model.game_state import GameState
 from src.model.player import Player
 from src.model.enemy import WormEnemy, BossHeart
@@ -18,6 +19,7 @@ from src.view.menu import Menu
 from src.view.pause import PauseScreen
 from src.view.controls import ControlsScreen
 from src.view.cursor import Cursor
+from src.view.dialogue import DialogueBox
 from src.view.debug import DebugOverlay
 from src.view.minimap import Minimap
 from src.controller.input_handler import InputHandler
@@ -42,6 +44,7 @@ class GameController:
         self.pause_screen = PauseScreen()
         self.controls_screen = ControlsScreen()
         self.cursor = Cursor()
+        self.dialogue = DialogueBox()
         self.minimap = Minimap()
         self.player = None
         self.floor = None
@@ -54,6 +57,7 @@ class GameController:
         self._transition_timer = 0.0
         self._transition_text = ""
         self._show_controls = False
+        self.exit_portal = None
 
     def run(self):
         while self.running:
@@ -67,6 +71,8 @@ class GameController:
                 self._update_menu()
             elif self.state_machine.is_in(GameState.PLAY):
                 self._update_play(dt)
+            elif self.state_machine.is_in(GameState.DIALOGUE):
+                self._update_dialogue(dt)
             elif self.state_machine.is_in(GameState.PAUSE):
                 self._update_pause()
             elif self.state_machine.is_in(GameState.DEATH):
@@ -86,7 +92,22 @@ class GameController:
         self.hud = HUD(self.player)
         self._spawn_current_room()
         self._transition_timer = 0.0
-        self.state_machine.change_to(GameState.PLAY)
+        self.exit_portal = None
+        room = self.floor.current_room
+        for p in room.spawned_pickups:
+            if not p.collected:
+                self.pickups.add(p)
+        self.dialogue.push(
+            "Старший Жнец",
+            "Слышь, стажёр. Появилась работёнка — "
+            "бесы совсем обнаглели, "
+            "прутся из всех щелей.\n"
+            "Возьми косу, гримуар "
+            "и прочисти этажи.",
+            choices=["Взял косу, босс.", "Ага."],
+        )
+        self.state_machine.change_to(GameState.DIALOGUE)
+        self.state_machine.previous_state = GameState.PLAY
 
     def _advance_floor(self):
         self.floor = Floor(floor_number=self.floor.floor_number + 1)
@@ -94,53 +115,118 @@ class GameController:
         self.enemies.empty()
         self.projectiles.empty()
         self.pickups.empty()
+        self.exit_portal = None
+        self.player.hit_enemies.clear()
+        room = self.floor.current_room
+        for p in room.spawned_pickups:
+            if not p.collected:
+                self.pickups.add(p)
+        if self.floor.is_final:
+            self.dialogue.push(
+                "Старший Жнец",
+                f"Этаж {self.floor.floor_number} пройден!\n"
+                "Наверху босс. Возьми что-нибудь, "
+                "чтобы было не так страшно, салага!",
+                choices=["Усилить косу (урон + радиус)", "Гримуар: +1 снаряд"],
+                on_choice=self._apply_floor_buff,
+            )
+        else:
+            self.dialogue.push(
+                "Старший Жнец",
+                "Этаж пройден! Выбери награду, стажёр:",
+                choices=["Усилить косу (урон + радиус)", "Гримуар: +1 снаряд"],
+                on_choice=self._apply_floor_buff,
+            )
         self._spawn_current_room()
 
     def _spawn_current_room(self):
         room = self.floor.current_room
         if room.cleared:
             return
+        room.spawned_enemies.clear()
+        if room.room_type == RoomType.CHALLENGE:
+            room.current_wave = 0
+            if room.waves:
+                for wx, wy, sc in room.waves[room.current_wave]:
+                    e = sc(wx, wy)
+                    self.enemies.add(e)
+                    room.spawned_enemies.append(e)
+            return
         for wx, wy, sc in room.enemy_spawns:
             e = sc(wx, wy)
+            is_exit = room.room_type == RoomType.EXIT
+            chance = 0.10 if is_exit else 0.05
+            if sc is not BossHeart and random.random() < chance:
+                e = self._make_miniboss(e)
             self.enemies.add(e)
             room.spawned_enemies.append(e)
+
+    def _make_miniboss(self, enemy):
+        enemy.hp *= 2
+        enemy.max_hp = enemy.hp
+        enemy.speed *= 1.15
+        enemy.damage *= 1.5
+        enemy.image = pygame.transform.scale(enemy.image, (48, 48))
+        enemy.rect = enemy.image.get_rect(center=enemy.rect.center)
+        dark = pygame.Surface((48, 48))
+        dark.fill((80, 80, 80))
+        enemy.image.blit(dark, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+        enemy.base_image = enemy.image.copy()
+        return enemy
 
     def _check_room_clear(self):
         room = self.floor.current_room
         if room.cleared or not room.spawned_enemies:
             return
         if all(not e.alive for e in room.spawned_enemies):
+            if room.room_type == RoomType.CHALLENGE:
+                room.current_wave += 1
+                if room.current_wave < len(room.waves):
+                    room.spawned_enemies.clear()
+                    for wx, wy, sc in room.waves[room.current_wave]:
+                        e = sc(wx, wy)
+                        self.enemies.add(e)
+                        room.spawned_enemies.append(e)
+                    return
             room.cleared = True
             self._spawn_pickups(room)
             if room.room_type == RoomType.BOSS:
                 self.state_machine.change_to(GameState.BOSS_VICTORY)
 
     def _spawn_pickups(self, room):
-        if room.room_type not in (RoomType.COMBAT, RoomType.EXIT, RoomType.BOSS):
+        if room.room_type not in (RoomType.COMBAT, RoomType.EXIT, RoomType.BOSS, RoomType.CHALLENGE):
             return
         if room.room_type == RoomType.COMBAT:
-            for _ in range(random.randint(1, 3)):
+            for _ in range(random.randint(1, 2)):
                 x = random.randint(2 * TILE_SIZE, (ROOM_COLS - 2) * TILE_SIZE)
                 y = random.randint(2 * TILE_SIZE, (ROOM_ROWS - 2) * TILE_SIZE)
-                self.pickups.add(Pickup(x, y, PickupType.HEALTH))
+                p = Pickup(x, y, PickupType.HEALTH)
+                self.pickups.add(p)
+                room.spawned_pickups.append(p)
         if room.room_type == RoomType.EXIT:
             cx = ROOM_COLS // 2 * TILE_SIZE + TILE_SIZE // 2
             cy = ROOM_ROWS // 2 * TILE_SIZE + TILE_SIZE // 2
-            self.pickups.add(Pickup(cx - 32, cy, PickupType.GRIMOIRE_UPGRADE))
-            self.pickups.add(Pickup(cx + 32, cy, PickupType.HEALTH))
+            p = Pickup(cx, cy, PickupType.HEALTH)
+            self.pickups.add(p)
+            room.spawned_pickups.append(p)
+            ps = 48
+            self.exit_portal = pygame.Rect(cx - ps // 2, cy - ps // 2, ps, ps)
+        if room.room_type == RoomType.CHALLENGE:
+            cx = ROOM_COLS // 2 * TILE_SIZE + TILE_SIZE // 2
+            cy = ROOM_ROWS // 2 * TILE_SIZE + TILE_SIZE // 2
+            p = Pickup(cx, cy, PickupType.CHALLENGE_REWARD)
+            self.pickups.add(p)
+            room.spawned_pickups.append(p)
 
     def _check_door_transition(self):
         room = self.floor.current_room
         if room.room_type == RoomType.BOSS:
             return
-        if room.room_type in (RoomType.COMBAT, RoomType.EXIT) and not room.cleared:
+        if room.room_type in (RoomType.COMBAT, RoomType.EXIT, RoomType.CHALLENGE) and not room.cleared:
             return
         for door_pos, target_pos in room.doors.items():
             dr = room.get_door_rect(door_pos)
             if dr and self.player.rect.colliderect(dr):
-                if room.room_type == RoomType.EXIT and room.cleared:
-                    self._start_floor_transition()
-                    return
                 entered_from = OPPOSITE_DOOR[door_pos]
                 self.floor.enter_room(door_pos)
                 self.player.rect.center = self.floor.get_spawn_position(entered_from)
@@ -148,6 +234,10 @@ class GameController:
                 self.projectiles.empty()
                 self.pickups.empty()
                 self._spawn_current_room()
+                new_room = self.floor.current_room
+                for p in new_room.spawned_pickups:
+                    if not p.collected:
+                        self.pickups.add(p)
                 return
 
     def _start_floor_transition(self):
@@ -180,6 +270,9 @@ class GameController:
                 self._advance_floor()
                 self._transition_timer = 0.0
             return
+        if self.dialogue.is_busy:
+            self.state_machine.change_to(GameState.DIALOGUE)
+            return
         if self.input_handler.is_pause_pressed():
             self.state_machine.change_to(GameState.PAUSE)
             return
@@ -189,7 +282,13 @@ class GameController:
         self.player.angle = math.degrees(math.atan2(my - self.player.rect.centery, mx - self.player.rect.centerx))
         room = self.floor.current_room
         self.floor.visited_rooms.add(self.floor.current_pos)
-        self.player.update(dt, self.input_handler, room.get_wall_rects())
+        wall_rects = room.get_wall_rects()
+        if not room.cleared:
+            for dp in room.doors:
+                dr = room.get_door_rect(dp)
+                if dr:
+                    wall_rects.append(dr)
+        self.player.update(dt, self.input_handler, wall_rects)
         self.enemies.update(dt, self.player, room.tiles_to_grid())
         for e in self.enemies.sprites():
             e.apply_separation(self.enemies.sprites(), dt)
@@ -204,22 +303,43 @@ class GameController:
         self._check_pickup_collisions()
         self._check_room_clear()
         self._check_door_transition()
+        if room.room_type == RoomType.EXIT and room.cleared and self.exit_portal:
+            if self.player.rect.colliderect(self.exit_portal):
+                self._start_floor_transition()
         if not self.player.alive:
             self.state_machine.change_to(GameState.DEATH)
             return
         self._draw_play()
 
-    def _draw_play(self):
+    def _draw_play(self, with_cursor=True):
         self.renderer.draw_room(self.floor.current_room)
         self.renderer.draw_sprites(self.enemies)
         self.renderer.draw_sprites(self.projectiles)
         self.renderer.draw_sprites(self.pickups)
         self.renderer.draw_sprite(self.player)
+        if self.player.scythe_active:
+            spr = SPRITES.get("scythe")
+            if spr:
+                ss = int(64 * self.player.scythe_scale)
+                s = pygame.transform.scale(spr, (ss, ss))
+                s = pygame.transform.rotate(s, -self.player.scythe_angle)
+                off = 40 * self.player.scythe_scale
+                ox = math.cos(math.radians(self.player.scythe_angle)) * off
+                oy = math.sin(math.radians(self.player.scythe_angle)) * off
+                pc = self.camera.apply(self.player).center
+                sr = s.get_rect(center=(pc[0] + ox, pc[1] + oy))
+                self.screen.blit(s, sr)
+        if self.exit_portal and self.floor.current_room.room_type == RoomType.EXIT and self.floor.current_room.cleared:
+            pc = self.camera.apply_rect(self.exit_portal)
+            pygame.draw.circle(self.screen, (0, 200, 0), pc.center, 28)
+            pygame.draw.circle(self.screen, (100, 255, 100), pc.center, 20)
+            pygame.draw.circle(self.screen, (200, 255, 200), pc.center, 10)
         self.renderer.draw_wall_overlay()
         self.minimap.draw(self.screen, self.floor)
         self.renderer.draw_hud(self.hud)
         self.debug_overlay.draw(self.screen, self.camera, floor=self.floor, enemies=self.enemies.sprites())
-        self.cursor.draw(self.screen)
+        if with_cursor:
+            self.cursor.draw(self.screen)
         if self._transition_timer > 0:
             o = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
             o.set_alpha(200)
@@ -227,6 +347,49 @@ class GameController:
             self.screen.blit(o, (0, 0))
             t = self.font_floor.render(self._transition_text, True, (255, 255, 255))
             self.screen.blit(t, t.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+
+    def _update_dialogue(self, dt):
+        self.dialogue.update(dt)
+        self.dialogue.handle_input(
+            self.input_handler.confirm_pressed,
+            self.input_handler.scythe_pressed,
+            self.input_handler.get_movement()[1],
+        )
+        self._draw_play(with_cursor=False)
+        self.dialogue.draw(self.screen)
+        if not self.dialogue.is_busy:
+            self.state_machine.revert()
+
+    def _apply_floor_buff(self, i):
+        if i == 0:
+            self.player.scythe_damage += 15
+            self.player.scythe_range += 20
+            self.player.scythe_half += 10
+            self.player.scythe_scale += 0.15
+            self.dialogue.push(
+                "Старший Жнец",
+                "Да ты любишь настоящее рубилово, сынок!\n"
+                "Держи покрепче, а то кости у вас, стажёров, слабенькие",
+            )
+        elif i == 1:
+            self.player.grimoir_projectiles += 1
+            self.dialogue.push(
+                "Старший Жнец",
+                "Ага, метишь в архимаги? Ну-ну,\n"
+                "архимагичилка ещё не выросла",
+            )
+
+    def _apply_challenge_reward(self, i):
+        if i == 0:
+            self.player.max_hp = int(self.player.max_hp * 1.2)
+            self.player.hp = min(int(self.player.hp * 1.2), self.player.max_hp)
+            self.dialogue.push("Награда", "Максимальное HP увеличено на 20%!")
+        elif i == 1:
+            self.player.scythe_cooldown_duration = max(0.1, self.player.scythe_cooldown_duration - 0.05)
+            self.dialogue.push("Награда", "Скорость атаки увеличена!")
+        elif i == 2:
+            self.player.grimoir_projectiles += 1
+            self.dialogue.push("Награда", "+1 снаряд гримуара!")
 
     def _update_pause(self):
         if self.input_handler.scythe_pressed:
@@ -258,8 +421,11 @@ class GameController:
         if not self.player.scythe_active:
             return
         for e in self.enemies.sprites():
-            if self.player.is_scythe_hitting(e.rect.center):
-                e.take_damage(SCYTHE_DAMAGE)
+            if e in self.player.hit_enemies:
+                continue
+            if self.player.is_scythe_hitting(e.rect):
+                e.take_damage(self.player.scythe_damage)
+                self.player.hit_enemies.add(e)
 
     def _check_grimoir_fire(self):
         if not self.player.grimoir_just_fired:
@@ -290,5 +456,20 @@ class GameController:
                 if p.ptype == PickupType.HEALTH:
                     self.player.heal(HEALTH_PICKUP_HEAL)
                 elif p.ptype == PickupType.GRIMOIRE_UPGRADE:
-                    self.player.grimoir_projectiles += 1
+                    n = self.player.grimoir_projectiles
+                    self.dialogue.push(
+                        "Гримуар",
+                        "Древняя сила наполняет страницы...\n"
+                        f"Увеличить количество снарядов? ({n} \u2192 {n + 1})",
+                        choices=["Да", "Нет"],
+                        on_choice=lambda i: setattr(self.player, 'grimoir_projectiles', self.player.grimoir_projectiles + 1) if i == 0 else None,
+                    )
+                elif p.ptype == PickupType.CHALLENGE_REWARD:
+                    self.dialogue.push(
+                        "Испытание пройдено",
+                        "Выбери награду:",
+                        choices=["+20% макс. HP", "Скорость атаки", "+1 снаряд"],
+                        on_choice=self._apply_challenge_reward,
+                    )
+                p.collected = True
                 p.kill()

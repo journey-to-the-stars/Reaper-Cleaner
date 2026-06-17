@@ -8,6 +8,7 @@ class Minimap:
         self.cell_size = 14
         self.gap = 2
         self.margin = 10
+        self._font = pygame.font.Font(None, 18)
 
     def draw(self, screen, floor):
         if not floor or not floor.rooms:
@@ -44,6 +45,8 @@ class Minimap:
                 color = (200, 180, 40)
             elif room.room_type == RoomType.EXIT:
                 color = (60, 140, 220)
+            elif room.room_type == RoomType.CHALLENGE:
+                color = (139, 0, 0)
 
             rx = self.margin + (gx - min_x) * (cs + gap)
             ry = self.margin + (gy - min_y) * (cs + gap)
@@ -53,5 +56,10 @@ class Minimap:
                                  (rx - 1, ry - 1, cs + 2, cs + 2), 2)
 
             pygame.draw.rect(surf, color, (rx, ry, cs, cs))
+
+            if room.room_type == RoomType.BOSS:
+                mark = self._font.render("!", True, (0, 0, 0))
+                mr = mark.get_rect(center=(rx + cs // 2, ry + cs // 2))
+                surf.blit(mark, mr)
 
         screen.blit(surf, (SCREEN_WIDTH - map_w - 10, 10))

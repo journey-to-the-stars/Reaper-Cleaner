@@ -5,6 +5,7 @@ import pygame
 class PickupType(Enum):
     HEALTH = auto()
     GRIMOIRE_UPGRADE = auto()
+    CHALLENGE_REWARD = auto()
 
 
 class Pickup(pygame.sprite.Sprite):
@@ -14,6 +15,9 @@ class Pickup(pygame.sprite.Sprite):
         self.image = pygame.Surface((16, 16))
         if ptype == PickupType.HEALTH:
             self.image.fill((200, 40, 40))
+        elif ptype == PickupType.CHALLENGE_REWARD:
+            self.image.fill((255, 215, 0))
         else:
             self.image.fill((40, 100, 220))
         self.rect = self.image.get_rect(center=(x, y))
+        self.collected = False

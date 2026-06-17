@@ -11,25 +11,40 @@ def astar(start, goal, grid):
     if not (0 <= start[0] < cols and 0 <= start[1] < rows
             and 0 <= goal[0] < cols and 0 <= goal[1] < rows):
         return []
+    if grid[goal[1]][goal[0]] == TileType.WALL:
+        return []
 
+    counter = 0
     open_set = []
-    heapq.heappush(open_set, (0, 0, start))
+    heapq.heappush(open_set, (0, counter, start))
     came_from = {}
     g_score = {start: 0}
+    closed_set = set()
 
     while open_set:
         _, _, current = heapq.heappop(open_set)
+
+        if current in closed_set:
+            continue
         if current == goal:
-            path = _reconstruct_path(came_from, current)
-            return _smooth_path(path, grid)
+            return _smooth_path(_reconstruct_path(came_from, current), grid)
+
+        closed_set.add(current)
 
         for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0),
-                        (1, 1), (1, -1), (-1, 1), (-1, -1)]:
+                       (1, 1), (1, -1), (-1, 1), (-1, -1)]:
             neighbor = (current[0] + dx, current[1] + dy)
             if not (0 <= neighbor[0] < cols and 0 <= neighbor[1] < rows):
                 continue
+            if neighbor in closed_set:
+                continue
             if grid[neighbor[1]][neighbor[0]] == TileType.WALL:
                 continue
+            if dx != 0 and dy != 0:
+                nx = grid[current[1] + dy][current[0]] == TileType.WALL
+                ny = grid[current[1]][current[0] + dx] == TileType.WALL
+                if nx and ny:
+                    continue
 
             step_cost = 1.414 if dx != 0 and dy != 0 else 1.0
             tentative_g = g_score[current] + step_cost
@@ -37,7 +52,8 @@ def astar(start, goal, grid):
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
                 f = tentative_g + _heuristic(neighbor, goal)
-                heapq.heappush(open_set, (f, tentative_g, neighbor))
+                counter += 1
+                heapq.heappush(open_set, (f, counter, neighbor))
 
     return []
 
@@ -58,13 +74,14 @@ def _reconstruct_path(came_from, current):
 
 
 def _smooth_path(path, grid):
-    if len(path) <= 2:
+    if len(path) <= 3:
         return path
 
     smoothed = [path[0]]
     i = 0
     while i < len(path) - 1:
-        j = len(path) - 1
+        max_j = min(i + 3, len(path) - 1)
+        j = max_j
         while j > i + 1:
             if _has_line_of_sight(path[i], path[j], grid):
                 break
