@@ -1,4 +1,4 @@
-from src.config.settings import ROOM_COLS, ROOM_ROWS, TILE_SIZE, NUM_FLOORS
+from src.config.settings import TILE_SIZE, NUM_FLOORS
 from src.algorithms.generation import generate_floor_layout
 from src.model.level.room import DoorPosition, OPPOSITE_DOOR
 
@@ -27,15 +27,17 @@ class Floor:
         return True
 
     def get_spawn_position(self, entered_from):
-        cx = ROOM_COLS // 2 * TILE_SIZE + TILE_SIZE // 2
-        cy = ROOM_ROWS // 2 * TILE_SIZE + TILE_SIZE // 2
+        room = self.current_room
+        w, h = room.room_width, room.room_height
+        cx = w // 2 * TILE_SIZE + TILE_SIZE // 2
+        cy = h // 2 * TILE_SIZE + TILE_SIZE // 2
 
         if entered_from == DoorPosition.NORTH:
             return (cx, 3 * TILE_SIZE)
         elif entered_from == DoorPosition.SOUTH:
-            return (cx, (ROOM_ROWS - 4) * TILE_SIZE)
+            return (cx, (h - 4) * TILE_SIZE)
         elif entered_from == DoorPosition.WEST:
             return (3 * TILE_SIZE, cy)
         elif entered_from == DoorPosition.EAST:
-            return ((ROOM_COLS - 4) * TILE_SIZE, cy)
+            return ((w - 4) * TILE_SIZE, cy)
         return (cx, cy)

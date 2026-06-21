@@ -3,8 +3,11 @@ from src.config.settings import SCREEN_WIDTH, SCREEN_HEIGHT, ROOM_COLS, ROOM_ROW
 
 class Camera:
     def __init__(self):
-        self.offset_x = (SCREEN_WIDTH - ROOM_COLS * TILE_SIZE) // 2
-        self.offset_y = (SCREEN_HEIGHT - ROOM_ROWS * TILE_SIZE) // 2
+        self.set_room(ROOM_COLS, ROOM_ROWS)
+
+    def set_room(self, width, height):
+        self.offset_x = (SCREEN_WIDTH - width * TILE_SIZE) // 2
+        self.offset_y = (SCREEN_HEIGHT - height * TILE_SIZE) // 2
 
     def apply(self, entity):
         if hasattr(entity, 'rect'):

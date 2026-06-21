@@ -32,12 +32,14 @@ OPPOSITE_DOOR = {
 }
 
 class Room:
-    def __init__(self, grid_x, grid_y):
+    def __init__(self, grid_x, grid_y, room_width=None, room_height=None):
         self.grid_x = grid_x
         self.grid_y = grid_y
         self.room_type = RoomType.COMBAT
         self.cleared = False
         self.doors = {}
+        self.room_width = room_width if room_width is not None else ROOM_COLS
+        self.room_height = room_height if room_height is not None else ROOM_ROWS
         self.tiles = self._build_tiles()
         self.enemy_spawns = []
         self.spawned_enemies = []
@@ -46,15 +48,16 @@ class Room:
         self.current_wave = 0
 
     def _build_tiles(self):
-        tiles = [[TileType.WALL] * ROOM_COLS for _ in range(ROOM_ROWS)]
+        w, h = self.room_width, self.room_height
+        tiles = [[TileType.WALL] * w for _ in range(h)]
 
-        for y in range(1, ROOM_ROWS - 1):
-            for x in range(1, ROOM_COLS - 1):
+        for y in range(1, h - 1):
+            for x in range(1, w - 1):
                 tiles[y][x] = TileType.FLOOR
 
         half = ROOM_DOOR_WIDTH // 2
-        cx = ROOM_COLS // 2
-        cy = ROOM_ROWS // 2
+        cx = w // 2
+        cy = h // 2
 
         for door_pos in self.doors:
             if door_pos == DoorPosition.NORTH:
@@ -62,10 +65,10 @@ class Room:
                     tiles[0][dx] = TileType.DOOR
             elif door_pos == DoorPosition.SOUTH:
                 for dx in range(cx - half, cx + half + 1):
-                    tiles[ROOM_ROWS - 1][dx] = TileType.DOOR
+                    tiles[h - 1][dx] = TileType.DOOR
             elif door_pos == DoorPosition.EAST:
                 for dy in range(cy - half, cy + half + 1):
-                    tiles[dy][ROOM_COLS - 1] = TileType.DOOR
+                    tiles[dy][w - 1] = TileType.DOOR
             elif door_pos == DoorPosition.WEST:
                 for dy in range(cy - half, cy + half + 1):
                     tiles[dy][0] = TileType.DOOR
@@ -74,7 +77,8 @@ class Room:
 
     def _door_zones(self):
         zones = set()
-        cx, cy = ROOM_COLS // 2, ROOM_ROWS // 2
+        w, h = self.room_width, self.room_height
+        cx, cy = w // 2, h // 2
         hw = ROOM_DOOR_WIDTH // 2 + 3
         for door_pos in self.doors:
             if door_pos == DoorPosition.NORTH:
@@ -83,11 +87,11 @@ class Room:
                         zones.add((dx, dy))
             elif door_pos == DoorPosition.SOUTH:
                 for dx in range(cx - hw, cx + hw + 1):
-                    for dy in range(ROOM_ROWS - 8, ROOM_ROWS):
+                    for dy in range(h - 8, h):
                         zones.add((dx, dy))
             elif door_pos == DoorPosition.EAST:
                 for dy in range(cy - hw, cy + hw + 1):
-                    for dx in range(ROOM_COLS - 8, ROOM_COLS):
+                    for dx in range(w - 8, w):
                         zones.add((dx, dy))
             elif door_pos == DoorPosition.WEST:
                 for dy in range(cy - hw, cy + hw + 1):
@@ -96,15 +100,16 @@ class Room:
         return zones
 
     def generate_enemy_spawns(self):
-        if self.room_type not in (RoomType.COMBAT, RoomType.BOSS, RoomType.EXIT):
+        if self.room_type not in (RoomType.COMBAT, RoomType.BOSS, RoomType.EXIT, RoomType.CHALLENGE):
             return
 
         zones = self._door_zones()
         quadrants = [[], [], [], []]
-        mid_x, mid_y = ROOM_COLS // 2, ROOM_ROWS // 2
+        w, h = self.room_width, self.room_height
+        mid_x, mid_y = w // 2, h // 2
 
-        for y in range(7, ROOM_ROWS - 7):
-            for x in range(7, ROOM_COLS - 7):
+        for y in range(7, h - 7):
+            for x in range(7, w - 7):
                 if (x, y) in zones:
                     continue
                 tx = x * TILE_SIZE + TILE_SIZE // 2
@@ -134,38 +139,39 @@ class Room:
 
     def get_door_rect(self, door_pos):
         half = ROOM_DOOR_WIDTH // 2
-        cx = ROOM_COLS // 2
-        cy = ROOM_ROWS // 2
+        w, h = self.room_width, self.room_height
+        cx = w // 2
+        cy = h // 2
 
         if door_pos == DoorPosition.NORTH:
             x = (cx - half) * TILE_SIZE
             y = 0
-            w = ROOM_DOOR_WIDTH * TILE_SIZE
-            h = TILE_SIZE
+            dw = ROOM_DOOR_WIDTH * TILE_SIZE
+            dh = TILE_SIZE
         elif door_pos == DoorPosition.SOUTH:
             x = (cx - half) * TILE_SIZE
-            y = (ROOM_ROWS - 1) * TILE_SIZE
-            w = ROOM_DOOR_WIDTH * TILE_SIZE
-            h = TILE_SIZE
+            y = (h - 1) * TILE_SIZE
+            dw = ROOM_DOOR_WIDTH * TILE_SIZE
+            dh = TILE_SIZE
         elif door_pos == DoorPosition.EAST:
-            x = (ROOM_COLS - 1) * TILE_SIZE
+            x = (w - 1) * TILE_SIZE
             y = (cy - half) * TILE_SIZE
-            w = TILE_SIZE
-            h = ROOM_DOOR_WIDTH * TILE_SIZE
+            dw = TILE_SIZE
+            dh = ROOM_DOOR_WIDTH * TILE_SIZE
         elif door_pos == DoorPosition.WEST:
             x = 0
             y = (cy - half) * TILE_SIZE
-            w = TILE_SIZE
-            h = ROOM_DOOR_WIDTH * TILE_SIZE
+            dw = TILE_SIZE
+            dh = ROOM_DOOR_WIDTH * TILE_SIZE
         else:
             return None
 
-        return pygame.Rect(x, y, w, h)
+        return pygame.Rect(x, y, dw, dh)
 
     def get_wall_rects(self):
         rects = []
-        for y in range(ROOM_ROWS):
-            for x in range(ROOM_COLS):
+        for y in range(self.room_height):
+            for x in range(self.room_width):
                 if self.tiles[y][x] in (TileType.WALL, TileType.VOID):
                     rects.append(pygame.Rect(
                         x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE,
@@ -173,10 +179,10 @@ class Room:
         return rects
 
     def tiles_to_grid(self):
-        return [[self.tiles[y][x] for x in range(ROOM_COLS)] for y in range(ROOM_ROWS)]
+        return [[self.tiles[y][x] for x in range(self.room_width)] for y in range(self.room_height)]
 
     @property
     def center(self):
-        cx = ROOM_COLS // 2 * TILE_SIZE + TILE_SIZE // 2
-        cy = ROOM_ROWS // 2 * TILE_SIZE + TILE_SIZE // 2
+        cx = self.room_width // 2 * TILE_SIZE + TILE_SIZE // 2
+        cy = self.room_height // 2 * TILE_SIZE + TILE_SIZE // 2
         return (cx, cy)

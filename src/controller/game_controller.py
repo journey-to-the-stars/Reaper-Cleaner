@@ -2,7 +2,7 @@ import pygame, math, sys, random
 from src.config.settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TILE_SIZE,
     FLOOR_TRANSITION_DURATION, NUM_FLOORS, HEALTH_PICKUP_HEAL,
-    ROOM_COLS, ROOM_ROWS, SCYTHE_ARC, SCYTHE_DURATION,
+    ROOM_COLS, ROOM_ROWS,
 )
 from src.config.assets import init_sprites, SPRITES
 from src.model.game_state import GameState
@@ -56,6 +56,9 @@ class GameController:
         self.font_floor = pygame.font.Font(None, 72)
         self._transition_timer = 0.0
         self._transition_text = ""
+        self._room_transition_timer = 0.0
+        self._death_fade_timer = 0.0
+        self._victory_fade_timer = 0.0
         self._show_controls = False
         self.exit_portal = None
 
@@ -76,15 +79,16 @@ class GameController:
             elif self.state_machine.is_in(GameState.PAUSE):
                 self._update_pause()
             elif self.state_machine.is_in(GameState.DEATH):
-                self._update_death()
+                self._update_death(dt)
             elif self.state_machine.is_in(GameState.BOSS_VICTORY):
-                self._update_victory()
+                self._update_victory(dt)
             pygame.display.flip()
         pygame.quit()
         sys.exit()
 
     def _start_game(self):
         self.floor = Floor(floor_number=1)
+        self._update_camera_for_room()
         self.player = Player(*self.floor.current_room.center)
         self.enemies = pygame.sprite.Group()
         self.projectiles = pygame.sprite.Group()
@@ -92,6 +96,7 @@ class GameController:
         self.hud = HUD(self.player)
         self._spawn_current_room()
         self._transition_timer = 0.0
+        self._room_transition_timer = 0.0
         self.exit_portal = None
         room = self.floor.current_room
         for p in room.spawned_pickups:
@@ -105,16 +110,20 @@ class GameController:
             "Возьми косу, гримуар "
             "и прочисти этажи.",
             choices=["Взял косу, босс.", "Ага."],
+            on_choice=self._apply_intro_buff,
         )
         self.state_machine.change_to(GameState.DIALOGUE)
         self.state_machine.previous_state = GameState.PLAY
 
     def _advance_floor(self):
-        self.floor = Floor(floor_number=self.floor.floor_number + 1)
+        prev_floor = self.floor.floor_number
+        self.floor = Floor(floor_number=prev_floor + 1)
+        self._update_camera_for_room()
         self.player.rect.center = self.floor.current_room.center
         self.enemies.empty()
         self.projectiles.empty()
         self.pickups.empty()
+        self._room_transition_timer = 0.0
         self.exit_portal = None
         self.player.hit_enemies.clear()
         room = self.floor.current_room
@@ -124,8 +133,8 @@ class GameController:
         if self.floor.is_final:
             self.dialogue.push(
                 "Старший Жнец",
-                f"Этаж {self.floor.floor_number} пройден!\n"
-                "Наверху босс. Возьми что-нибудь, "
+                f"Этаж {prev_floor} пройден!\n"
+                "Впереди босс. Возьми что-нибудь, "
                 "чтобы было не так страшно, салага!",
                 choices=["Усилить косу (урон + радиус)", "Гримуар: +1 снаряд"],
                 on_choice=self._apply_floor_buff,
@@ -143,19 +152,28 @@ class GameController:
         room = self.floor.current_room
         if room.cleared:
             return
+        floor = self.floor.floor_number
         room.spawned_enemies.clear()
         if room.room_type == RoomType.CHALLENGE:
             room.current_wave = 0
-            if room.waves:
+            if room.waves and room.waves[0]:
                 for wx, wy, sc in room.waves[room.current_wave]:
                     e = sc(wx, wy)
+                    if random.random() < 0.05 + floor * 0.02:
+                        e = self._make_miniboss(e)
                     self.enemies.add(e)
                     room.spawned_enemies.append(e)
+            else:
+                room.room_type = RoomType.COMBAT
+                room.waves = []
             return
         for wx, wy, sc in room.enemy_spawns:
             e = sc(wx, wy)
+            if sc is BossHeart:
+                e.room_width = room.room_width
+                e.room_height = room.room_height
             is_exit = room.room_type == RoomType.EXIT
-            chance = 0.10 if is_exit else 0.05
+            chance = (0.10 + floor * 0.03) if is_exit else (0.05 + floor * 0.02)
             if sc is not BossHeart and random.random() < chance:
                 e = self._make_miniboss(e)
             self.enemies.add(e)
@@ -191,34 +209,46 @@ class GameController:
             room.cleared = True
             self._spawn_pickups(room)
             if room.room_type == RoomType.BOSS:
-                self.state_machine.change_to(GameState.BOSS_VICTORY)
+                self._victory_fade_timer = 0.5
 
     def _spawn_pickups(self, room):
         if room.room_type not in (RoomType.COMBAT, RoomType.EXIT, RoomType.BOSS, RoomType.CHALLENGE):
             return
         if room.room_type == RoomType.COMBAT:
+            existing = [p.rect for p in room.spawned_pickups]
             for _ in range(random.randint(1, 2)):
-                x = random.randint(2 * TILE_SIZE, (ROOM_COLS - 2) * TILE_SIZE)
-                y = random.randint(2 * TILE_SIZE, (ROOM_ROWS - 2) * TILE_SIZE)
+                for attempt in range(20):
+                    x = random.randint(2 * TILE_SIZE, (room.room_width - 2) * TILE_SIZE)
+                    y = random.randint(2 * TILE_SIZE, (room.room_height - 2) * TILE_SIZE)
+                    r = pygame.Rect(x - 8, y - 8, 16, 16)
+                    if not any(r.colliderect(e) for e in existing):
+                        break
                 p = Pickup(x, y, PickupType.HEALTH)
                 self.pickups.add(p)
                 room.spawned_pickups.append(p)
+                existing.append(p.rect)
         if room.room_type == RoomType.EXIT:
-            cx = ROOM_COLS // 2 * TILE_SIZE + TILE_SIZE // 2
-            cy = ROOM_ROWS // 2 * TILE_SIZE + TILE_SIZE // 2
+            cx = room.room_width // 2 * TILE_SIZE + TILE_SIZE // 2
+            cy = room.room_height // 2 * TILE_SIZE + TILE_SIZE // 2
             p = Pickup(cx, cy, PickupType.HEALTH)
             self.pickups.add(p)
             room.spawned_pickups.append(p)
             ps = 48
             self.exit_portal = pygame.Rect(cx - ps // 2, cy - ps // 2, ps, ps)
         if room.room_type == RoomType.CHALLENGE:
-            cx = ROOM_COLS // 2 * TILE_SIZE + TILE_SIZE // 2
-            cy = ROOM_ROWS // 2 * TILE_SIZE + TILE_SIZE // 2
+            cx = room.room_width // 2 * TILE_SIZE + TILE_SIZE // 2
+            cy = room.room_height // 2 * TILE_SIZE + TILE_SIZE // 2
             p = Pickup(cx, cy, PickupType.CHALLENGE_REWARD)
             self.pickups.add(p)
             room.spawned_pickups.append(p)
 
+    def _update_camera_for_room(self):
+        room = self.floor.current_room
+        self.camera.set_room(room.room_width, room.room_height)
+
     def _check_door_transition(self):
+        if self._room_transition_timer > 0:
+            return
         room = self.floor.current_room
         if room.room_type == RoomType.BOSS:
             return
@@ -229,6 +259,7 @@ class GameController:
             if dr and self.player.rect.colliderect(dr):
                 entered_from = OPPOSITE_DOOR[door_pos]
                 self.floor.enter_room(door_pos)
+                self._update_camera_for_room()
                 self.player.rect.center = self.floor.get_spawn_position(entered_from)
                 self.enemies.empty()
                 self.projectiles.empty()
@@ -238,6 +269,7 @@ class GameController:
                 for p in new_room.spawned_pickups:
                     if not p.collected:
                         self.pickups.add(p)
+                self._room_transition_timer = 0.3
                 return
 
     def _start_floor_transition(self):
@@ -263,12 +295,57 @@ class GameController:
         self.cursor.draw(self.screen)
 
     def _update_play(self, dt):
+        FADE_DURATION = 0.5
+        if self._death_fade_timer > 0:
+            self._death_fade_timer -= dt
+            self._draw_play()
+            alpha = 255 * (1 - self._death_fade_timer / FADE_DURATION)
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(int(alpha))
+            self.screen.blit(overlay, (0, 0))
+            if self._death_fade_timer <= 0:
+                self._death_fade_timer = 0.0
+                self.dialogue.push(
+                    "Старший Жнец",
+                    "Ты... серьёзно? Ну как так можно, стажёр?\n"
+                    "Косу тебе доверили, гримуар выдали...\n"
+                    "Эх, тебе только ковры чистить.\n"
+                    "Ладно, давай сначала.",
+                    choices=["Продолжить"],
+                    on_choice=lambda _: self.state_machine.change_to(GameState.MENU)
+                )
+                self.state_machine.change_to(GameState.DEATH)
+            return
+        if self._victory_fade_timer > 0:
+            self._victory_fade_timer -= dt
+            self._draw_play()
+            alpha = 255 * (1 - self._victory_fade_timer / FADE_DURATION)
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(int(alpha))
+            self.screen.blit(overlay, (0, 0))
+            if self._victory_fade_timer <= 0:
+                self._victory_fade_timer = 0.0
+                self.dialogue.push(
+                    "Старший Жнец",
+                    "О, а ты молодец, стажёр! Не ожидал, если честно.\n"
+                    "Докладываю: бесовское засилье подавлено.\n"
+                    "Возвращайся пока в Чистилище, отдыхай.\n"
+                    "Как будут дела — я свистну.",
+                    choices=["Продолжить"],
+                    on_choice=lambda _: self.state_machine.change_to(GameState.MENU)
+                )
+                self.state_machine.change_to(GameState.BOSS_VICTORY)
+            return
         if self._transition_timer > 0:
             self._transition_timer -= dt
             self._draw_play()
             if self._transition_timer <= 0:
                 self._advance_floor()
                 self._transition_timer = 0.0
+            return
+        if self._room_transition_timer > 0:
+            self._room_transition_timer -= dt
+            self._draw_play()
             return
         if self.dialogue.is_busy:
             self.state_machine.change_to(GameState.DIALOGUE)
@@ -307,7 +384,7 @@ class GameController:
             if self.player.rect.colliderect(self.exit_portal):
                 self._start_floor_transition()
         if not self.player.alive:
-            self.state_machine.change_to(GameState.DEATH)
+            self._death_fade_timer = 0.5
             return
         self._draw_play()
 
@@ -334,7 +411,7 @@ class GameController:
             pygame.draw.circle(self.screen, (0, 200, 0), pc.center, 28)
             pygame.draw.circle(self.screen, (100, 255, 100), pc.center, 20)
             pygame.draw.circle(self.screen, (200, 255, 200), pc.center, 10)
-        self.renderer.draw_wall_overlay()
+        self.renderer.draw_wall_overlay(self.floor.current_room)
         self.minimap.draw(self.screen, self.floor)
         self.renderer.draw_hud(self.hud)
         self.debug_overlay.draw(self.screen, self.camera, floor=self.floor, enemies=self.enemies.sprites())
@@ -347,6 +424,12 @@ class GameController:
             self.screen.blit(o, (0, 0))
             t = self.font_floor.render(self._transition_text, True, (255, 255, 255))
             self.screen.blit(t, t.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+        if self._room_transition_timer > 0:
+            o = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            alpha = min(255, int(255 * (self._room_transition_timer / 0.3)))
+            o.set_alpha(alpha)
+            o.fill((0, 0, 0))
+            self.screen.blit(o, (0, 0))
 
     def _update_dialogue(self, dt):
         self.dialogue.update(dt)
@@ -369,14 +452,14 @@ class GameController:
             self.dialogue.push(
                 "Старший Жнец",
                 "Да ты любишь настоящее рубилово, сынок!\n"
-                "Держи покрепче, а то кости у вас, стажёров, слабенькие",
+                "Держи покрепче, а то кости у вас, стажёров, слабенькие.",
             )
         elif i == 1:
             self.player.grimoir_projectiles += 1
             self.dialogue.push(
                 "Старший Жнец",
                 "Ага, метишь в архимаги? Ну-ну,\n"
-                "архимагичилка ещё не выросла",
+                "архимагичилка ещё не выросла.",
             )
 
     def _apply_challenge_reward(self, i):
@@ -388,8 +471,15 @@ class GameController:
             self.player.scythe_cooldown_duration = max(0.1, self.player.scythe_cooldown_duration - 0.05)
             self.dialogue.push("Награда", "Скорость атаки увеличена!")
         elif i == 2:
-            self.player.grimoir_projectiles += 1
-            self.dialogue.push("Награда", "+1 снаряд гримуара!")
+            self.player.grimoir_charge_time = max(0.3, self.player.grimoir_charge_time - 0.08)
+            self.dialogue.push("Награда", "Скорость зарядки гримуара увеличена!")
+
+    def _apply_intro_buff(self, i):
+        if i == 0:
+            self.player.scythe_cooldown_duration = max(0.1, self.player.scythe_cooldown_duration - 0.05)
+        elif i == 1:
+            self.player.max_hp = int(self.player.max_hp * 1.2)
+            self.player.hp = self.player.max_hp
 
     def _update_pause(self):
         if self.input_handler.scythe_pressed:
@@ -405,17 +495,25 @@ class GameController:
         self.renderer.draw_pause(self.pause_screen)
         self.cursor.draw(self.screen)
 
-    def _update_death(self):
-        if self.input_handler.scythe_pressed or self.input_handler.is_pause_pressed():
-            self.state_machine.change_to(GameState.MENU)
-        t = self.font_large.render("Похоже, тебе чистить только ковры", True, (255, 100, 100))
-        self.renderer.draw_overlay_text(t)
+    def _update_death(self, dt):
+        self.dialogue.update(dt)
+        self.dialogue.handle_input(
+            self.input_handler.confirm_pressed,
+            self.input_handler.scythe_pressed,
+            self.input_handler.get_movement()[1],
+        )
+        self.screen.fill((0, 0, 0))
+        self.dialogue.draw(self.screen)
 
-    def _update_victory(self):
-        if self.input_handler.scythe_pressed or self.input_handler.is_pause_pressed():
-            self.state_machine.change_to(GameState.MENU)
-        t = self.font_large.render("Молодец, стажёр!", True, (100, 255, 100))
-        self.renderer.draw_overlay_text(t)
+    def _update_victory(self, dt):
+        self.dialogue.update(dt)
+        self.dialogue.handle_input(
+            self.input_handler.confirm_pressed,
+            self.input_handler.scythe_pressed,
+            self.input_handler.get_movement()[1],
+        )
+        self.screen.fill((0, 0, 0))
+        self.dialogue.draw(self.screen)
 
     def _check_scythe_hits(self):
         if not self.player.scythe_active:
@@ -468,7 +566,7 @@ class GameController:
                     self.dialogue.push(
                         "Испытание пройдено",
                         "Выбери награду:",
-                        choices=["+20% макс. HP", "Скорость атаки", "+1 снаряд"],
+                        choices=["+20% макс. HP", "Скорость атаки", "+0.08c зарядка"],
                         on_choice=self._apply_challenge_reward,
                     )
                 p.collected = True

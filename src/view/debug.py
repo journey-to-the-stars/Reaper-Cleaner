@@ -18,7 +18,7 @@ class DebugOverlay:
         if room:
             pygame.draw.rect(
                 screen, GREEN,
-                (ox, oy, ROOM_COLS * TILE_SIZE, ROOM_ROWS * TILE_SIZE), 2,
+                (ox, oy, room.room_width * TILE_SIZE, room.room_height * TILE_SIZE), 2,
             )
 
             y = oy + 4

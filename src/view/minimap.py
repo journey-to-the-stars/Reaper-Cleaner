@@ -30,8 +30,18 @@ class Minimap:
         surf = pygame.Surface((map_w, map_h), pygame.SRCALPHA)
         surf.fill((0, 0, 0, 160))
 
+        neighbor_set = set()
+        for vpos in floor.visited_rooms:
+            vr = floor.rooms.get(vpos)
+            if vr:
+                neighbor_set.update(vr.doors.values())
+        neighbor_set.difference_update(floor.visited_rooms)
+
         for (gx, gy), room in floor.rooms.items():
-            if (gx, gy) not in floor.visited_rooms:
+            visited = (gx, gy) in floor.visited_rooms
+            is_neighbor = (gx, gy) in neighbor_set
+
+            if not visited and not is_neighbor:
                 continue
 
             color = (80, 80, 80)
@@ -55,7 +65,11 @@ class Minimap:
                 pygame.draw.rect(surf, (255, 255, 255),
                                  (rx - 1, ry - 1, cs + 2, cs + 2), 2)
 
-            pygame.draw.rect(surf, color, (rx, ry, cs, cs))
+            cell_surf = pygame.Surface((cs, cs), pygame.SRCALPHA)
+            if not visited:
+                cell_surf.set_alpha(100)
+            cell_surf.fill(color)
+            surf.blit(cell_surf, (rx, ry))
 
             if room.room_type == RoomType.BOSS:
                 mark = self._font.render("!", True, (0, 0, 0))

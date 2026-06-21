@@ -19,6 +19,9 @@ class DialogueBox:
         self._typing = False
         self._cursor_idx = 0
         self._choice_mode = False
+        self._font_title = pygame.font.Font(None, 26)
+        self._font_text = pygame.font.Font(None, 22)
+        self._font_small = pygame.font.Font(None, 18)
 
     def push(self, title, text, choices=None, on_choice=None):
         self.queue.append({
@@ -78,14 +81,12 @@ class DialogueBox:
         y = self.rect.y + PADDING
 
         if self.current["title"]:
-            f = pygame.font.Font(None, 26)
-            s = f.render(self.current["title"], True, (255, 255, 255))
+            s = self._font_title.render(self.current["title"], True, (255, 255, 255))
             screen.blit(s, (x, y))
             y += LINE_SPACING + 4
 
-        f = pygame.font.Font(None, 22)
         for line in self._text_display.split("\n"):
-            s = f.render(line, True, (255, 255, 255))
+            s = self._font_text.render(line, True, (255, 255, 255))
             screen.blit(s, (x, y))
             y += LINE_SPACING
 
@@ -93,13 +94,12 @@ class DialogueBox:
             y = self.rect.bottom - PADDING - len(self.current["choices"]) * LINE_SPACING
             for i, choice in enumerate(self.current["choices"]):
                 prefix = "\u25b6 " if i == self._cursor_idx else "  "
-                s = f.render(f"{prefix}{choice}", True, (255, 255, 255) if i == self._cursor_idx else (180, 180, 180))
+                s = self._font_text.render(f"{prefix}{choice}", True, (255, 255, 255) if i == self._cursor_idx else (180, 180, 180))
                 screen.blit(s, (x + 10, y))
                 y += LINE_SPACING
 
         elif not self._typing and not self._choice_mode:
-            f_small = pygame.font.Font(None, 18)
-            s = f_small.render("[\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u041b\u041a\u041c]", True, (120, 120, 120))
+            s = self._font_small.render("[\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u041b\u041a\u041c]", True, (120, 120, 120))
             screen.blit(s, (x, self.rect.bottom - PADDING - 22))
 
     def _start_next(self):

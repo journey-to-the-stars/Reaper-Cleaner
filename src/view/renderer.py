@@ -50,10 +50,14 @@ class Renderer:
         for sprite in group:
             self.draw_sprite(sprite)
 
-    def draw_wall_overlay(self):
+    def draw_wall_overlay(self, room=None):
         ox, oy = self.camera.offset_x, self.camera.offset_y
-        room_w = ROOM_COLS * TILE_SIZE
-        room_h = ROOM_ROWS * TILE_SIZE
+        if room:
+            room_w = room.room_width * TILE_SIZE
+            room_h = room.room_height * TILE_SIZE
+        else:
+            room_w = ROOM_COLS * TILE_SIZE
+            room_h = ROOM_ROWS * TILE_SIZE
 
         if ox > 0:
             self.screen.fill(BLACK, (0, 0, ox, SCREEN_HEIGHT))

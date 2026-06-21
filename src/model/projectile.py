@@ -17,6 +17,7 @@ class Projectile(pygame.sprite.Sprite):
         self.damage = damage
         self.homing = homing
         self.homing_speed = GRIMOIR_HOMING_SPEED
+        self.homing_timer = 999 if homing else 0.0
         self.lifetime = 3.0
         self.target = None
 
@@ -26,7 +27,8 @@ class Projectile(pygame.sprite.Sprite):
             self.kill()
             return
 
-        if self.homing and enemies:
+        if self.homing and enemies and self.homing_timer > 0:
+            self.homing_timer -= dt
             if not self.target or not self.target.alive:
                 nearest = knn(self.pos, enemies, 1)
                 self.target = nearest[0] if nearest else None

@@ -1,13 +1,12 @@
 import pygame, math, random
 from src.config.settings import (
-    ENEMY_SPEED, ENEMY_HP, ENEMY_DAMAGE, ENEMY_SIZE,
     ENEMY_DETECTION_RANGE, ENEMY_CHASE_SPEED_MULT,
     WORM_SPEED, WORM_HP, WORM_DAMAGE,
     BOSS_HP, BOSS_PROJECTILE_SPEED, BOSS_PROJECTILE_DAMAGE,
     BOSS_PHASE1_COOLDOWN, BOSS_PHASE2_COOLDOWN, BOSS_PHASE3_COOLDOWN, BOSS_PHASE4_COOLDOWN,
-    BOSS_RADIAL_COUNT, BOSS_AIMED_COUNT, BOSS_SPIRAL_COUNT, BOSS_CROSS_COUNT,
-    BOSS_MIXED_RADIAL, BOSS_MIXED_AIMED,
+    BOSS_AIMED_COUNT, BOSS_MIXED_RADIAL, BOSS_MIXED_AIMED,
     TILE_SIZE, ROOM_COLS, ROOM_ROWS,
+    BOSS_WALL_PROJECTILE_SPEED,
 )
 from src.algorithms.astar import astar
 from src.model.level.tile import TileType
@@ -256,17 +255,25 @@ class BossHeart(Enemy):
             g.add(BossProjectile(cx, cy, a, BOSS_PROJECTILE_SPEED, BOSS_PROJECTILE_DAMAGE))
 
     def _burst_wall_h(self, g, player):
-        cy = self.rect.centery
+        w = getattr(self, 'room_width', ROOM_COLS)
+        h = getattr(self, 'room_height', ROOM_ROWS)
         step = TILE_SIZE * 4
-        count = (ROOM_COLS - 4) * TILE_SIZE // step
+        count = (w - 4) * TILE_SIZE // step
+        from_bottom = random.random() < 0.5
+        cy = (h - 1) * TILE_SIZE if from_bottom else 0
+        angle = 270 if from_bottom else 90
         for i in range(count):
             x = (4 + i * step // TILE_SIZE) * TILE_SIZE
-            g.add(BossProjectile(x, cy, math.radians(90), BOSS_PROJECTILE_SPEED, BOSS_PROJECTILE_DAMAGE))
+            g.add(BossProjectile(x, cy, math.radians(angle), BOSS_WALL_PROJECTILE_SPEED, BOSS_PROJECTILE_DAMAGE))
 
     def _burst_wall_v(self, g, player):
-        cx = self.rect.centerx
+        w = getattr(self, 'room_width', ROOM_COLS)
+        h = getattr(self, 'room_height', ROOM_ROWS)
         step = TILE_SIZE * 4
-        count = (ROOM_ROWS - 4) * TILE_SIZE // step
+        count = (h - 4) * TILE_SIZE // step
+        from_right = random.random() < 0.5
+        cx = (w - 1) * TILE_SIZE if from_right else 0
+        angle = 180 if from_right else 0
         for i in range(count):
             y = (4 + i * step // TILE_SIZE) * TILE_SIZE
-            g.add(BossProjectile(cx, y, math.radians(0), BOSS_PROJECTILE_SPEED, BOSS_PROJECTILE_DAMAGE))
+            g.add(BossProjectile(cx, y, math.radians(angle), BOSS_WALL_PROJECTILE_SPEED, BOSS_PROJECTILE_DAMAGE))

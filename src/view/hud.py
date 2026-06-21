@@ -1,7 +1,7 @@
 import pygame
 from src.config.settings import (
     HP_BAR_WIDTH, HP_BAR_HEIGHT, GRIMOIR_CHARGE_TIME, DARK_GRAY, RED, WHITE,
-    GRIMOIR_INDICATOR_SIZE, PURPLE, GOLD,
+    GRIMOIR_INDICATOR_SIZE, PURPLE, GOLD, PLAYER_HP,
 )
 
 
@@ -17,9 +17,11 @@ class HUD:
     def _draw_hp_bar(self, screen):
         bar_x = 20
         bar_y = 20
-        pygame.draw.rect(screen, DARK_GRAY, (bar_x, bar_y, HP_BAR_WIDTH, HP_BAR_HEIGHT))
+        scale = self.player.max_hp / PLAYER_HP
+        bar_w = int(HP_BAR_WIDTH * scale)
+        pygame.draw.rect(screen, DARK_GRAY, (bar_x, bar_y, bar_w, HP_BAR_HEIGHT))
         if self.player.hp > 0:
-            fill_width = int((self.player.hp / self.player.max_hp) * HP_BAR_WIDTH)
+            fill_width = int((self.player.hp / self.player.max_hp) * bar_w)
             pygame.draw.rect(screen, RED, (bar_x, bar_y, fill_width, HP_BAR_HEIGHT))
 
     def _draw_grimoir_indicator(self, screen):

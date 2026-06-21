@@ -45,6 +45,7 @@ class Player(pygame.sprite.Sprite):
         self.grimoir_charging = False
         self.grimoir_cooldown = 0.0
         self.grimoir_just_fired = False
+        self.grimoir_charge_time = GRIMOIR_CHARGE_TIME
         self.grimoir_projectiles = GRIMOIR_PROJECTILES
         self.scythe_damage = SCYTHE_DAMAGE
         self.scythe_range = SCYTHE_RANGE
@@ -136,7 +137,7 @@ class Player(pygame.sprite.Sprite):
                 self.grimoir_charge += dt
         else:
             if self.grimoir_charging:
-                if self.grimoir_charge >= GRIMOIR_CHARGE_TIME:
+                if self.grimoir_charge >= self.grimoir_charge_time:
                     self.grimoir_just_fired = True
                     self.grimoir_cooldown = GRIMOIR_COOLDOWN
                 self.grimoir_charging = False
