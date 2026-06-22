@@ -73,8 +73,10 @@ class BossProjectile(Projectile):
     def __init__(self, x, y, angle, speed, damage):
         super().__init__(x, y, angle, speed, damage, homing=False)
         spr = SPRITES.get("boss_projectile_lust")
-        self.image = pygame.transform.scale(spr, (16, 16)) if spr else pygame.Surface((16, 16))
-        if not spr:
+        if spr:
+            self.image = spr.copy()
+        else:
+            self.image = pygame.Surface((16, 16))
             self.image.fill((220, 40, 220))
         self.rect = self.image.get_rect(center=(int(x), int(y)))
         self.lifetime = 4.0

@@ -1,10 +1,16 @@
 import random
-from collections import deque
 from src.config.settings import MIN_ROOMS, MAX_ROOMS, TILE_SIZE, EXIT_ENEMY_MULTIPLIER, NUM_FLOORS
 from src.model.level.room import (
     Room, RoomType, DoorPosition, OPPOSITE_DOOR,
 )
 from src.model.enemy import WormEnemy, BossHeart
+
+_DIRECTIONS = [
+    (0, -1, DoorPosition.NORTH, DoorPosition.SOUTH),
+    (0, 1, DoorPosition.SOUTH, DoorPosition.NORTH),
+    (-1, 0, DoorPosition.WEST, DoorPosition.EAST),
+    (1, 0, DoorPosition.EAST, DoorPosition.WEST),
+]
 
 
 def generate_floor_layout(floor_number=1):
@@ -13,49 +19,41 @@ def generate_floor_layout(floor_number=1):
     start = (0, 0)
     rooms[start] = Room(0, 0)
 
-    directions = [
-        (0, -1, DoorPosition.NORTH, DoorPosition.SOUTH),
-        (0, 1, DoorPosition.SOUTH, DoorPosition.NORTH),
-        (-1, 0, DoorPosition.WEST, DoorPosition.EAST),
-        (1, 0, DoorPosition.EAST, DoorPosition.WEST),
-    ]
-
-    queue = deque([start])
-    visited = {start}
+    queue = [start]
     expansion_order = [start]
     parent_of = {}
-    bfs_distance = {start: 0}
 
     while queue and len(rooms) < target:
-        current = queue.popleft()
-        random.shuffle(directions)
+        current = queue.pop(0)
+        dirs = _DIRECTIONS[:]
+        random.shuffle(dirs)
         r = random.random()
-        if r < 0.55:      max_place = 1
-        elif r < 0.85:    max_place = 2
-        else:              max_place = 3
+        if r < 0.55:
+            max_place = 1
+        elif r < 0.85:
+            max_place = 2
+        else:
+            max_place = 3
         placed = 0
 
-        for dx, dy, door_out, door_in in directions:
+        for dx, dy, door_out, door_in in dirs:
             if placed >= max_place:
                 break
             new_pos = (current[0] + dx, current[1] + dy)
-            if new_pos in visited:
+            if new_pos in rooms:
                 continue
             if len(rooms) >= target:
                 break
 
             nx, ny = new_pos
-            visited.add(new_pos)
             new_room = Room(new_pos[0], new_pos[1])
             new_room.doors[door_in] = current
             rooms[current].doors[door_out] = new_pos
             rooms[new_pos] = new_room
             parent_of[new_pos] = current
-            bfs_distance[new_pos] = bfs_distance[current] + 1
             expansion_order.append(new_pos)
 
-            # Add doors to any existing adjacent rooms (other than parent)
-            for ndx, ndy, ndoor_out, ndoor_in in directions:
+            for ndx, ndy, ndoor_out, ndoor_in in _DIRECTIONS:
                 adj = (nx + ndx, ny + ndy)
                 if adj in rooms and adj != current:
                     if ndoor_out not in rooms[new_pos].doors:
@@ -74,7 +72,7 @@ def generate_floor_layout(floor_number=1):
     _assign_types(rooms, expansion_order, is_final, main_path)
     _ensure_start_connections(rooms)
     _add_cycles(rooms, max_cycles=random.randint(1, min(5, len(rooms))))
-    _ensure_dead_ends(rooms, expansion_order, is_final, main_path)
+    _ensure_dead_ends(rooms, expansion_order, main_path)
     _strip_extra_doors(rooms)
     _rebuild_tiles(rooms)
     _populate_spawns(rooms, is_final, floor_number)
@@ -98,8 +96,7 @@ def _assign_types(rooms, expansion_order, is_final, main_path=None):
     has_challenge = False
     for pos in expansion_order[1:-1]:
         room = rooms[pos]
-        is_dead_end = len(room.doors) == 1 and pos not in main_path
-        if is_dead_end and not has_challenge:
+        if len(room.doors) == 1 and pos not in main_path and not has_challenge:
             room.room_type = RoomType.CHALLENGE
             has_challenge = True
         else:
@@ -115,19 +112,13 @@ def _assign_types(rooms, expansion_order, is_final, main_path=None):
 
 
 def _add_cycles(rooms, max_cycles=2):
-    all_positions = list(rooms.keys())
     candidates = []
 
-    for pos in all_positions:
-        if rooms[pos].room_type != RoomType.COMBAT:
+    for pos, r in rooms.items():
+        if r.room_type != RoomType.COMBAT:
             continue
         x, y = pos
-        for dx, dy, door_out, door_in in [
-            (0, -1, DoorPosition.NORTH, DoorPosition.SOUTH),
-            (0, 1, DoorPosition.SOUTH, DoorPosition.NORTH),
-            (-1, 0, DoorPosition.WEST, DoorPosition.EAST),
-            (1, 0, DoorPosition.EAST, DoorPosition.WEST),
-        ]:
+        for dx, dy, door_out, door_in in _DIRECTIONS:
             neighbor = (x + dx, y + dy)
             if neighbor in rooms and rooms[neighbor].room_type == RoomType.COMBAT:
                 if door_out not in rooms[pos].doors:
@@ -147,17 +138,12 @@ def _add_cycles(rooms, max_cycles=2):
 def _ensure_start_connections(rooms, start=(0, 0)):
     if start not in rooms:
         return
-    # Remove any direct doors from start to EXIT/BOSS
+
     for door_pos, target in list(rooms[start].doors.items()):
         if target in rooms and rooms[target].room_type in (RoomType.EXIT, RoomType.BOSS):
             del rooms[start].doors[door_pos]
             rooms[target].doors.pop(OPPOSITE_DOOR[door_pos], None)
-    for dx, dy, door_out, door_in in [
-        (0, -1, DoorPosition.NORTH, DoorPosition.SOUTH),
-        (0, 1, DoorPosition.SOUTH, DoorPosition.NORTH),
-        (-1, 0, DoorPosition.WEST, DoorPosition.EAST),
-        (1, 0, DoorPosition.EAST, DoorPosition.WEST),
-    ]:
+    for dx, dy, door_out, door_in in _DIRECTIONS:
         npos = (start[0] + dx, start[1] + dy)
         if npos in rooms and door_out not in rooms[start].doors:
             if rooms[npos].room_type in (RoomType.EXIT, RoomType.BOSS):
@@ -166,20 +152,18 @@ def _ensure_start_connections(rooms, start=(0, 0)):
             rooms[npos].doors[door_in] = start
 
 
-def _ensure_dead_ends(rooms, expansion_order, is_final, main_path=None):
+def _ensure_dead_ends(rooms, expansion_order, main_path=None):
     if main_path is None:
         main_path = set()
     last_pos = expansion_order[-1]
-    # Check if any room (not start, not final) has ≤1 door and is off main_path
-    for pos, r in list(rooms.items()):
+    for pos, r in rooms.items():
         if pos == expansion_order[0] or pos == last_pos:
             continue
         if len(r.doors) <= 1 and pos not in main_path:
             return
 
-    # Create a dead end: find COMBAT rooms off main_path with ≥3 doors
     candidates = []
-    for pos, r in list(rooms.items()):
+    for pos, r in rooms.items():
         if pos == expansion_order[0] or pos == last_pos:
             continue
         if pos in main_path:
@@ -216,6 +200,14 @@ def _rebuild_tiles(rooms):
         room.tiles = room._build_tiles()
 
 
+def _offset_spawns(spawns, extra):
+    for _ in range(extra):
+        if spawns:
+            wx, wy, sc = random.choice(spawns)
+            spawns.append((wx + random.randint(-4, 4), wy + random.randint(-4, 4), sc))
+    return spawns
+
+
 def _populate_spawns(rooms, is_final, floor_number=1):
     extra = floor_number - 1
     for pos, room in rooms.items():
@@ -229,21 +221,13 @@ def _populate_spawns(rooms, is_final, floor_number=1):
         elif room.room_type == RoomType.COMBAT:
             room.generate_enemy_spawns()
             spawns = [(wx, wy, WormEnemy) for (wx, wy) in room.enemy_spawns]
-            for _ in range(extra):
-                if spawns:
-                    wx, wy, sc = random.choice(spawns)
-                    spawns.append((wx + random.randint(-4, 4), wy + random.randint(-4, 4), sc))
-            room.enemy_spawns = spawns
+            room.enemy_spawns = _offset_spawns(spawns, extra)
         elif room.room_type == RoomType.EXIT:
             room.generate_enemy_spawns()
             spawns = [(wx, wy, WormEnemy) for (wx, wy) in room.enemy_spawns]
             count = int(EXIT_ENEMY_MULTIPLIER) + (1 if random.random() < EXIT_ENEMY_MULTIPLIER % 1 else 0)
             spawns = spawns * count
-            for _ in range(extra):
-                if spawns:
-                    wx, wy, sc = random.choice(spawns)
-                    spawns.append((wx + random.randint(-4, 4), wy + random.randint(-4, 4), sc))
-            room.enemy_spawns = spawns
+            room.enemy_spawns = _offset_spawns(spawns, extra)
         elif room.room_type == RoomType.CHALLENGE:
             room.generate_enemy_spawns()
             if not room.enemy_spawns:

@@ -159,7 +159,12 @@ class WormEnemy(Enemy):
 class BossHeart(Enemy):
     def __init__(self, x, y):
         super().__init__(x, y, 0, BOSS_HP, 0, 64)
-        self.base_image.fill((180, 20, 20))
+        spr = SPRITES.get("boss")
+        if spr:
+            self.base_image = spr.copy()
+        else:
+            self.base_image = pygame.Surface((64, 64))
+            self.base_image.fill((180, 20, 20))
         self.image = self.base_image.copy()
         self.attack_timer = 0.0
         self._spiral_angle = 0.0
