@@ -177,6 +177,3 @@ class Player(pygame.sprite.Sprite):
     def alive(self):
         return self.hp > 0
 
-    @property
-    def center(self):
-        return pygame.math.Vector2(self.rect.center)

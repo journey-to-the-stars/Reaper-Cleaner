@@ -11,7 +11,6 @@ from src.model.level.tile import TileType
 class RoomType(Enum):
     START = auto()
     COMBAT = auto()
-    TREASURE = auto()
     EXIT = auto()
     BOSS = auto()
     CHALLENGE = auto()

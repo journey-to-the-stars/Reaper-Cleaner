@@ -8,7 +8,7 @@ from src.config.assets import init_sprites, SPRITES
 from src.model.game_state import GameState
 from src.model.player import Player
 from src.model.enemy import WormEnemy, BossHeart
-from src.model.projectile import GrimoirFlame, BloodClot, BossProjectile
+from src.model.projectile import GrimoirFlame, BossProjectile
 from src.model.pickup import Pickup, PickupType
 from src.model.level.floor import Floor
 from src.model.level.room import RoomType, DoorPosition, OPPOSITE_DOOR
@@ -308,7 +308,7 @@ class GameController:
                 self.dialogue.push(
                     "Старший Жнец",
                     "Ты... серьёзно? Ну как так можно, стажёр?\n"
-                    "Косу тебе доверили, гримуар выдали...\n"
+                    "Косу казённую доверили, гримуар выдали...\n"
                     "Эх, тебе только ковры чистить.\n"
                     "Ладно, давай сначала.",
                     choices=["Продолжить"],
@@ -328,7 +328,7 @@ class GameController:
                 self.dialogue.push(
                     "Старший Жнец",
                     "О, а ты молодец, стажёр! Не ожидал, если честно.\n"
-                    "Докладываю: бесовское засилье подавлено.\n"
+                    "Докладываю: первая зона зачищена.\n"
                     "Возвращайся пока в Чистилище, отдыхай.\n"
                     "Как будут дела — я свистну.",
                     choices=["Продолжить"],
@@ -537,7 +537,7 @@ class GameController:
 
     def _check_projectile_hits(self):
         for p in self.projectiles.sprites():
-            if isinstance(p, (BloodClot, BossProjectile)):
+            if isinstance(p, BossProjectile):
                 if self.player.rect.colliderect(p.rect):
                     self.player.take_damage(p.damage)
                     p.kill()
@@ -553,20 +553,11 @@ class GameController:
             if self.player.rect.colliderect(p.rect):
                 if p.ptype == PickupType.HEALTH:
                     self.player.heal(HEALTH_PICKUP_HEAL)
-                elif p.ptype == PickupType.GRIMOIRE_UPGRADE:
-                    n = self.player.grimoir_projectiles
-                    self.dialogue.push(
-                        "Гримуар",
-                        "Древняя сила наполняет страницы...\n"
-                        f"Увеличить количество снарядов? ({n} \u2192 {n + 1})",
-                        choices=["Да", "Нет"],
-                        on_choice=lambda i: setattr(self.player, 'grimoir_projectiles', self.player.grimoir_projectiles + 1) if i == 0 else None,
-                    )
                 elif p.ptype == PickupType.CHALLENGE_REWARD:
                     self.dialogue.push(
                         "Испытание пройдено",
                         "Выбери награду:",
-                        choices=["+20% макс. HP", "Скорость атаки", "+0.08c зарядка"],
+                        choices=["+20% макс. HP", "Скорость атаки", "-0.08c зарядка"],
                         on_choice=self._apply_challenge_reward,
                     )
                 p.collected = True

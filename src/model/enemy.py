@@ -28,9 +28,6 @@ class Enemy(pygame.sprite.Sprite):
         self.hit_timer = 0.0
         self.path = []
         self.path_index = 0
-        self.path_recalc_timer = 0.0
-        self._last_player_tile = None
-        self.velocity = pygame.math.Vector2(0, 0)
         self.state = "idle"
         self.detection_range = ENEMY_DETECTION_RANGE * TILE_SIZE
         self.chase_speed_mult = ENEMY_CHASE_SPEED_MULT
@@ -44,7 +41,12 @@ class Enemy(pygame.sprite.Sprite):
                 self.image = self.base_image.copy()
         dist = math.hypot(player.rect.centerx - self.rect.centerx, player.rect.centery - self.rect.centery)
         self.state = "chase" if dist < self.detection_range else "idle"
-        (self._chase if self.state == "chase" else self._patrol)(dt, player, grid)
+
+        if self.state == "chase":
+            self._chase(dt, player, grid)
+        else:
+            self._patrol(dt, player, grid)
+
         self.rect.centerx = max(TILE_SIZE, min(self.rect.centerx, (ROOM_COLS - 1) * TILE_SIZE))
         self.rect.centery = max(TILE_SIZE, min(self.rect.centery, (ROOM_ROWS - 1) * TILE_SIZE))
 
@@ -87,7 +89,6 @@ class Enemy(pygame.sprite.Sprite):
     def _follow_path(self, dt):
         speed = self.speed * (self.chase_speed_mult if self.state == "chase" else 1.0)
         if not self.path or self.path_index >= len(self.path):
-            self.velocity = pygame.math.Vector2(0, 0)
             return False
         tx = self.path[self.path_index][0] * TILE_SIZE + TILE_SIZE // 2
         ty = self.path[self.path_index][1] * TILE_SIZE + TILE_SIZE // 2
@@ -130,11 +131,6 @@ class Enemy(pygame.sprite.Sprite):
     @property
     def alive(self):
         return self.hp > 0
-
-    @property
-    def center(self):
-        return pygame.math.Vector2(self.rect.center)
-
 
 class WormEnemy(Enemy):
     def __init__(self, x, y):

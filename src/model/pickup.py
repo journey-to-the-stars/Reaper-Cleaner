@@ -5,7 +5,6 @@ from src.config.assets import SPRITES
 
 class PickupType(Enum):
     HEALTH = auto()
-    GRIMOIRE_UPGRADE = auto()
     CHALLENGE_REWARD = auto()
 
 

@@ -48,9 +48,6 @@ class DebugOverlay:
                     color = (150, 50, 50)
                 elif r.room_type == RoomType.BOSS:
                     color = RED
-                elif r.room_type == RoomType.TREASURE:
-                    color = YELLOW
-
                 if (gx, gy) == floor.current_pos:
                     pygame.draw.rect(screen, (255, 255, 255),
                                      (mini_x + gx * (mini_size + gap) - 1,

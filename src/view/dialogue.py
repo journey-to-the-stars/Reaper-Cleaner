@@ -93,13 +93,13 @@ class DialogueBox:
         if self._choice_mode and self.current["choices"]:
             y = self.rect.bottom - PADDING - len(self.current["choices"]) * LINE_SPACING
             for i, choice in enumerate(self.current["choices"]):
-                prefix = "\u25b6 " if i == self._cursor_idx else "  "
+                prefix = "▶ " if i == self._cursor_idx else "  "
                 s = self._font_text.render(f"{prefix}{choice}", True, (255, 255, 255) if i == self._cursor_idx else (180, 180, 180))
                 screen.blit(s, (x + 10, y))
                 y += LINE_SPACING
 
         elif not self._typing and not self._choice_mode:
-            s = self._font_small.render("[\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u041b\u041a\u041c]", True, (120, 120, 120))
+            s = self._font_small.render("[Нажмите ЛКМ]", True, (120, 120, 120))
             screen.blit(s, (x, self.rect.bottom - PADDING - 22))
 
     def _start_next(self):

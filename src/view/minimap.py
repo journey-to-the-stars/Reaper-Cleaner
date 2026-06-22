@@ -51,8 +51,6 @@ class Minimap:
                 color = (180, 60, 60)
             elif room.room_type == RoomType.BOSS:
                 color = (220, 40, 40)
-            elif room.room_type == RoomType.TREASURE:
-                color = (200, 180, 40)
             elif room.room_type == RoomType.EXIT:
                 color = (60, 140, 220)
             elif room.room_type == RoomType.CHALLENGE:

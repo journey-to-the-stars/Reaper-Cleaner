@@ -64,11 +64,6 @@ class GrimoirFlame(Projectile):
             self.rect = self.image.get_rect(center=(int(x), int(y)))
 
 
-class BloodClot(Projectile):
-    def __init__(self, x, y, angle):
-        super().__init__(x, y, angle, BOSS_PROJECTILE_SPEED, 12, homing=False, color=(120, 0, 0))
-
-
 class BossProjectile(Projectile):
     def __init__(self, x, y, angle, speed, damage):
         super().__init__(x, y, angle, speed, damage, homing=False)
