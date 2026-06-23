@@ -3,6 +3,7 @@ from src.config.settings import (
     PLAYER_SPEED, PLAYER_HP, PLAYER_SIZE,
     SCYTHE_COOLDOWN, SCYTHE_DURATION, SCYTHE_RANGE, SCYTHE_DAMAGE, SCYTHE_ARC,
     GRIMOIR_CHARGE_TIME, GRIMOIR_COOLDOWN, GRIMOIR_PROJECTILES,
+    I_FRAME_DURATION, SCYTHE_OFFSET,
 )
 from src.config.assets import SPRITES
 
@@ -54,7 +55,7 @@ class Player(pygame.sprite.Sprite):
         self.hit_enemies = set()
 
         self.i_frames = 0.0
-        self.i_frame_duration = 0.5
+        self.i_frame_duration = I_FRAME_DURATION
 
     def update(self, dt, input_handler, walls):
         dx, dy = input_handler.get_movement()
@@ -164,7 +165,7 @@ class Player(pygame.sprite.Sprite):
 
         hw, hh = self.scythe_half, self.scythe_half
         center = pygame.math.Vector2(self.rect.center)
-        scythe_center = center + pygame.math.Vector2(1, 0).rotate(self.scythe_angle) * 40
+        scythe_center = center + pygame.math.Vector2(1, 0).rotate(self.scythe_angle) * SCYTHE_OFFSET
 
         for pt in points:
             local = pygame.math.Vector2(pt) - scythe_center

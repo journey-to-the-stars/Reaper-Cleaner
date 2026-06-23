@@ -2,6 +2,8 @@ import pygame, math, sys, random
 from src.config.settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TILE_SIZE,
     FLOOR_TRANSITION_DURATION, NUM_FLOORS, HEALTH_PICKUP_HEAL,
+    FONT_SIZE_LARGE, FONT_SIZE_FLOOR, SCYTHE_OFFSET,
+    GRIMOIR_SPREAD, ROOM_TRANSITION_DURATION,
     ROOM_COLS, ROOM_ROWS,
 )
 from src.config.assets import init_sprites, SPRITES
@@ -52,8 +54,8 @@ class GameController:
         self.projectiles = pygame.sprite.Group()
         self.pickups = pygame.sprite.Group()
         self.hud = None
-        self.font_large = pygame.font.Font(None, 48)
-        self.font_floor = pygame.font.Font(None, 72)
+        self.font_large = pygame.font.Font(None, FONT_SIZE_LARGE)
+        self.font_floor = pygame.font.Font(None, FONT_SIZE_FLOOR)
         self._transition_timer = 0.0
         self._transition_text = ""
         self._room_transition_timer = 0.0
@@ -269,7 +271,7 @@ class GameController:
                 for p in new_room.spawned_pickups:
                     if not p.collected:
                         self.pickups.add(p)
-                self._room_transition_timer = 0.3
+                self._room_transition_timer = ROOM_TRANSITION_DURATION
                 return
 
     def _start_floor_transition(self):
@@ -400,7 +402,7 @@ class GameController:
                 ss = int(64 * self.player.scythe_scale)
                 s = pygame.transform.scale(spr, (ss, ss))
                 s = pygame.transform.rotate(s, -self.player.scythe_angle)
-                off = 40 * self.player.scythe_scale
+                off = SCYTHE_OFFSET * self.player.scythe_scale
                 ox = math.cos(math.radians(self.player.scythe_angle)) * off
                 oy = math.sin(math.radians(self.player.scythe_angle)) * off
                 pc = self.camera.apply(self.player).center
@@ -426,7 +428,7 @@ class GameController:
             self.screen.blit(t, t.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
         if self._room_transition_timer > 0:
             o = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            alpha = min(255, int(255 * (self._room_transition_timer / 0.3)))
+            alpha = min(255, int(255 * (self._room_transition_timer / ROOM_TRANSITION_DURATION)))
             o.set_alpha(alpha)
             o.fill((0, 0, 0))
             self.screen.blit(o, (0, 0))
@@ -529,7 +531,7 @@ class GameController:
         if not self.player.grimoir_just_fired:
             return
         self.player.grimoir_just_fired = False
-        spread = 15
+        spread = GRIMOIR_SPREAD
         n = self.player.grimoir_projectiles
         for i in range(n):
             a = self.player.angle + math.radians((i - (n - 1) / 2) * spread)

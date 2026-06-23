@@ -20,3 +20,9 @@
 ```bash
 pip install -r requirements.txt
 python main.py
+```
+
+## Тестирование
+```bash
+python -m unittest discover tests -v
+```

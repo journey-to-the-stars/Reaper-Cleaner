@@ -1,4 +1,5 @@
 import pygame, math, random
+from abc import ABC, abstractmethod
 from src.config.settings import (
     ENEMY_DETECTION_RANGE, ENEMY_CHASE_SPEED_MULT,
     WORM_SPEED, WORM_HP, WORM_DAMAGE,
@@ -7,6 +8,7 @@ from src.config.settings import (
     BOSS_AIMED_COUNT, BOSS_MIXED_RADIAL, BOSS_MIXED_AIMED,
     TILE_SIZE, ROOM_COLS, ROOM_ROWS,
     BOSS_WALL_PROJECTILE_SPEED,
+    BOSS_SPIRAL_INCREMENT,
 )
 from src.algorithms.astar import astar
 from src.model.level.tile import TileType
@@ -14,7 +16,7 @@ from src.model.projectile import BossProjectile
 from src.config.assets import SPRITES
 
 
-class Enemy(pygame.sprite.Sprite):
+class Enemy(ABC, pygame.sprite.Sprite):
     def __init__(self, x, y, base_speed, hp, damage, size):
         super().__init__()
         self.hp = hp
@@ -34,6 +36,7 @@ class Enemy(pygame.sprite.Sprite):
         self.patrol_target = None
         self.patrol_timer = random.uniform(1.0, 3.0)
 
+    @abstractmethod
     def update(self, dt, player, grid):
         if self.hit_timer > 0:
             self.hit_timer -= dt
@@ -223,7 +226,7 @@ class BossHeart(Enemy):
     def _burst(self, g, radial_count=None, player=None, spiral=False):
         cx, cy = self.rect.centerx, self.rect.centery
         if spiral:
-            self._spiral_angle = (self._spiral_angle + 25) % 360
+            self._spiral_angle = (self._spiral_angle + BOSS_SPIRAL_INCREMENT) % 360
             step = 360.0 / radial_count
             for i in range(radial_count):
                 a = math.radians(self._spiral_angle + i * step)
